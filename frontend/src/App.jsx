@@ -1,12 +1,55 @@
 import { useState } from 'react'
 import './App.css'
 
+const sections = [
+  ['SUMMARY', 'summary'],
+  ['ERROR DETECTED', 'error'],
+  ['LIKELY ROOT CAUSE', 'root'],
+  ['EVIDENCE', 'evidence'],
+  ['EXPECTED BEHAVIOR', 'expected'],
+  ['ACTUAL BEHAVIOR', 'actual'],
+  ['REPRODUCTION STEPS', 'steps'],
+  ['RECOMMENDED FIX', 'fix'],
+  ['NEXT DEBUGGING STEP', 'next'],
+  ['DEVELOPER NOTE', 'note'],
+]
+
+function parseReport(text) {
+  const result = {
+    title: 'Development Error',
+  }
+
+  const titleMatch = text.match(
+    /BUG TITLE:\s*([\s\S]*?)(?=\n[A-Z][A-Z ]+:\s*|$)/
+  )
+
+  if (titleMatch) {
+    result.title = titleMatch[1].trim()
+  }
+
+  sections.forEach(([label, key]) => {
+    const regex = new RegExp(
+      `${label}:\\s*([\\s\\S]*?)(?=\\n[A-Z][A-Z ]+:\\s*|$)`
+    )
+
+    const match = text.match(regex)
+
+    if (match) {
+      result[key] = match[1].trim()
+    }
+  })
+
+  return result
+}
+
 function App() {
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
-  const [analysis, setAnalysis] = useState('')
+  const [analysis, setAnalysis] = useState(null)
+  const [rawAnalysis, setRawAnalysis] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
 
   const handleFile = (selectedFile) => {
     if (!selectedFile || !selectedFile.type.startsWith('image/')) {
@@ -16,8 +59,10 @@ function App() {
 
     setFile(selectedFile)
     setPreview(URL.createObjectURL(selectedFile))
-    setAnalysis('')
+    setAnalysis(null)
+    setRawAnalysis('')
     setError('')
+    setCopied(false)
   }
 
   const handleDrop = (e) => {
@@ -29,17 +74,20 @@ function App() {
     if (!file) return
 
     setLoading(true)
-    setAnalysis('')
+    setAnalysis(null)
     setError('')
 
     const formData = new FormData()
     formData.append('image', file)
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/analyze', {
-        method: 'POST',
-        body: formData,
-      })
+      const response = await fetch(
+        'http://127.0.0.1:5000/api/analyze',
+        {
+          method: 'POST',
+          body: formData,
+        }
+      )
 
       const data = await response.json()
 
@@ -47,7 +95,8 @@ function App() {
         throw new Error(data.error || 'Analysis failed')
       }
 
-      setAnalysis(data.analysis)
+      setRawAnalysis(data.analysis)
+      setAnalysis(parseReport(data.analysis))
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     } finally {
@@ -55,77 +104,141 @@ function App() {
     }
   }
 
+  const copyReport = async () => {
+    if (!rawAnalysis) return
+
+    await navigator.clipboard.writeText(rawAnalysis)
+    setCopied(true)
+
+    setTimeout(() => {
+      setCopied(false)
+    }, 2000)
+  }
+
   return (
     <main className="app">
+
+      {/* HEADER */}
+
       <header className="header">
-        <div className="logo">Bug<span>Lens</span></div>
-        <p>AI-powered screenshot debugging</p>
+        <div className="brand">
+          <div className="brand-mark">B</div>
+
+          <div>
+            <div className="logo">BugLens</div>
+            <div className="brand-subtitle">
+              Development error intelligence
+            </div>
+          </div>
+        </div>
+
+        <div className="gemma-pill">
+          <span className="status-dot"></span>
+          Powered by Gemma 4
+        </div>
       </header>
 
+
+      {/* HERO */}
+
       <section className="hero">
-        <div className="badge">POWERED BY GEMMA 4</div>
+
+        <div className="eyebrow">
+          SCREENSHOT → BUG REPORT
+        </div>
 
         <h1>
-          Turn confusing errors into
-          <span> clear fixes.</span>
+          Turn development errors into
+          <span> actionable reports.</span>
         </h1>
 
-        <p className="subtitle">
-          Upload a screenshot of your error. BugLens analyzes it and tells you
-          what went wrong, why, and what to do next.
+        <p className="hero-text">
+          Upload a screenshot of an error from your IDE, terminal,
+          browser or development environment. BugLens analyzes the
+          visual evidence and turns it into a structured report
+          developers can actually use.
         </p>
+
       </section>
 
+
+      {/* WORKSPACE */}
+
       <section className="workspace">
+
         <div
           className={`upload-box ${preview ? 'has-image' : ''}`}
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
         >
-          {preview ? (
-            <div className="preview-container">
-              <img src={preview} alt="Uploaded error screenshot" />
 
-              <button
-                className="change-btn"
-                onClick={() => document.getElementById('fileInput').click()}
-              >
-                Change screenshot
-              </button>
-            </div>
-          ) : (
+          {!preview ? (
             <>
-              <div className="upload-icon">↑</div>
+              <div className="upload-symbol">
+                ↑
+              </div>
 
-              <h2>Drop your error screenshot here</h2>
+              <h2>
+                Drop an error screenshot here
+              </h2>
 
-              <p>or</p>
+              <p>
+                Drag & drop your screenshot or browse your files
+              </p>
 
               <label className="browse-btn">
-                Browse files
+                Browse screenshot
+
                 <input
-                  id="fileInput"
                   type="file"
                   accept="image/*"
-                  onChange={(e) => handleFile(e.target.files[0])}
+                  onChange={(e) =>
+                    handleFile(e.target.files[0])
+                  }
                   hidden
                 />
               </label>
 
-              <small>PNG, JPG or WEBP</small>
+              <span className="file-types">
+                PNG · JPG · WEBP
+              </span>
             </>
+          ) : (
+            <div className="preview-container">
+
+              <div className="preview-header">
+                <span>UPLOADED SCREENSHOT</span>
+
+                <button
+                  className="change-btn"
+                  onClick={() =>
+                    document.getElementById('fileInput').click()
+                  }
+                >
+                  Change
+                </button>
+              </div>
+
+              <img
+                src={preview}
+                alt="Uploaded development error"
+              />
+
+              <input
+                id="fileInput"
+                type="file"
+                accept="image/*"
+                onChange={(e) =>
+                  handleFile(e.target.files[0])
+                }
+                hidden
+              />
+
+            </div>
           )}
 
-          {preview && (
-            <input
-              id="fileInput"
-              type="file"
-              accept="image/*"
-              onChange={(e) => handleFile(e.target.files[0])}
-              hidden
-            />
-          )}
         </div>
+
 
         {file && (
           <button
@@ -133,48 +246,113 @@ function App() {
             onClick={analyzeScreenshot}
             disabled={loading}
           >
-            {loading ? 'Analyzing with Gemma 4...' : 'Analyze Error →'}
+            {loading ? (
+              <>
+                <span className="spinner"></span>
+                Gemma 4 is analyzing...
+              </>
+            ) : (
+              <>
+                Analyze with Gemma 4
+                <span>→</span>
+              </>
+            )}
           </button>
         )}
 
+
         {error && (
           <div className="error-box">
-            {error}
+            <strong>Analysis failed</strong>
+            <span>{error}</span>
           </div>
         )}
 
+
+        {/* REPORT */}
+
         {analysis && (
-          <section className="result">
-            <div className="result-header">
-              <span className="result-badge">GEMMA 4 ANALYSIS</span>
-              <h2>Here's what BugLens found</h2>
+          <section className="report">
+
+            <div className="report-top">
+
+              <div>
+                <div className="report-label">
+                  GEMMA 4 ANALYSIS
+                </div>
+
+                <h2>
+                  {analysis.title}
+                </h2>
+              </div>
+
+              <button
+                className="copy-btn"
+                onClick={copyReport}
+              >
+                {copied ? '✓ Copied' : 'Copy Report'}
+              </button>
+
             </div>
 
-            <div className="analysis-box">
-              {analysis.split('\n').map((line, index) => {
-                const isHeading =
-                  line.startsWith('PROBLEM:') ||
-                  line.startsWith('LIKELY CAUSE:') ||
-                  line.startsWith('FIX:') ||
-                  line.startsWith('NEXT STEP:')
+
+            <div className="report-grid">
+
+              {sections.map(([label, key]) => {
+
+                if (!analysis[key]) return null
+
+                const isCode =
+                  key === 'error' || key === 'fix'
 
                 return (
-                  <p
-                    key={index}
-                    className={isHeading ? 'analysis-heading' : ''}
+                  <article
+                    className={`report-card ${
+                      key === 'summary'
+                        ? 'summary-card'
+                        : ''
+                    }`}
+                    key={key}
                   >
-                    {line}
-                  </p>
+
+                    <div className="card-label">
+                      {label}
+                    </div>
+
+                    {isCode ? (
+                      <pre className="code-block">
+                        {analysis[key]}
+                      </pre>
+                    ) : (
+                      <div className="card-content">
+                        {analysis[key]}
+                      </div>
+                    )}
+
+                  </article>
                 )
               })}
+
             </div>
+
           </section>
         )}
+
       </section>
 
+
+      {/* FOOTER */}
+
       <footer>
-        BugLens · Built with React, Flask & Gemma 4
+        <span>BugLens</span>
+        <span>•</span>
+        <span>React</span>
+        <span>•</span>
+        <span>Flask</span>
+        <span>•</span>
+        <span>Gemma 4</span>
       </footer>
+
     </main>
   )
 }
